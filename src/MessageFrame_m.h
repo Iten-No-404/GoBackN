@@ -72,7 +72,7 @@ class MessageFrame_Base : public ::omnetpp::cPacket
     int seqNum = 0;
     std::string payload;
     char parity = 0;
-    int frameType = 0;
+    int frameType = 0; //Data=0, ACK=1, NACK=2.
     int ackNum = 0;
 
   private:

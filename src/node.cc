@@ -8,7 +8,9 @@
 #include <omnetpp.h>
 #include <fstream>
 #include <vector>
+#include <bitset>
 #include "MessageFrame_m.h"
+typedef std::bitset<8> bits;
 
 #define flag '$'
 #define escape '/'
@@ -27,6 +29,7 @@ class Node : public cSimpleModule
     int index = 0;
     int seqNum = 0;
     std::vector<std::string> errors,messages;
+
     // The following redefined virtual function holds the algorithm.
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
@@ -43,13 +46,22 @@ void Node::initialize()
 
 void Node::handleMessage(cMessage *msg)
 {
-//    EV<<msg->getFullName();
     MessageFrame_Base *mmsg = check_and_cast<MessageFrame_Base *> (msg);
-    EV<<mmsg->getPayload();
+    EV<<mmsg->getFrameType();
+    if(!sender){
+        EV<<"\nSeqNo: ";
+        EV<<mmsg->getSeqNum();
+        EV<<"\nPayload: ";
+        EV<<mmsg->getPayload();
+        EV<<"\nParity: ";
+        EV<<bits(mmsg->getParity()).to_string();
+    }
+    else {
+        EV<<"\nAckNo: ";
+        EV<<mmsg->getAckNum();
+    }
     std::string sending ="Yes";
     if(initial && mmsg->getPayload() == sending){
-//    if(initial && msg->getFullName() == sending){
-//        EV<<"Entered!";
         sender = true;
         if(isName("node0"))
             index = 0;
@@ -60,21 +72,49 @@ void Node::handleMessage(cMessage *msg)
         initial = false;
     } else if(initial) {
         initial = false;
+        cancelAndDelete(msg);
         return;
     }
     if(sender){
         if(seqNum<messages.size()){
             std::string value = byteStuffing();
-//            cMessage *newMsg = new cMessage(" ");
             MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
-//            newMsg->setName(value.c_str());
-//            newMsg->setPayload(value);
+            newMsg->setSeqNum(seqNum);
+            bits parity(std::string("00000000"));
+            for(int i=0; i<value.size(); i++)
+            {
+                bits temp(value[i]);
+                parity = parity ^ temp;
+            }
+            newMsg->setParity(static_cast<char>( parity.to_ulong() ));
+            newMsg->setFrameType(0);
             send(newMsg, "nodeGate$o"); // send out the message
             seqNum++;
         }
     } else {
-//        cMessage *ackMsg = new cMessage("ACK");
-        MessageFrame_Base *ackMsg = new MessageFrame_Base("ACK");
+        std::string name = "";
+        std::string payload = mmsg->getPayload();
+        bool noError = false;
+        int frameType = 2;
+        bits parity(std::string("00000000"));
+        for(int i=0; i<payload.size(); i++)
+        {
+            bits temp(payload[i]);
+            parity = parity ^ temp;
+        }
+        if(static_cast<char>( parity.to_ulong() ) == mmsg->getParity())
+        {
+            noError = true;
+            name = "ACK";
+            frameType = 1;
+        } else {
+            noError = false;
+            name = "NACK";
+            frameType = 2;
+        }
+        MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
+        ackMsg->setAckNum(mmsg->getSeqNum()+1);
+        ackMsg->setFrameType(frameType);
         send(ackMsg, "nodeGate$o"); // send out the message
     }
     cancelAndDelete(msg);
