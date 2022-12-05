@@ -8,6 +8,7 @@
 #include <string>
 #include <omnetpp.h>
 #include <fstream>
+#include "MessageFrame_m.h"
 
 using namespace omnetpp;
 
@@ -28,8 +29,10 @@ Define_Module(Coordinator);
 
 void Coordinator::initialize()
 {
-    cMessage *senderMsg = new cMessage("Yes");
-    cMessage *receiverMsg = new cMessage("No");
+//    cMessage *senderMsg = new cMessage("Yes");
+//    cMessage *receiverMsg = new cMessage("No");
+    MessageFrame_Base *senderMsg = new MessageFrame_Base("Yes");
+    MessageFrame_Base *receiverMsg = new MessageFrame_Base("No");
     std::ifstream OpenFile;
     char sender = '0';
     char receiver = '1';

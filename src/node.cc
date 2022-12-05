@@ -8,6 +8,7 @@
 #include <omnetpp.h>
 #include <fstream>
 #include <vector>
+#include "MessageFrame_m.h"
 
 #define flag '$'
 #define escape '/'
@@ -42,10 +43,13 @@ void Node::initialize()
 
 void Node::handleMessage(cMessage *msg)
 {
-    EV<<msg->getFullName();
+//    EV<<msg->getFullName();
+    MessageFrame_Base *mmsg = check_and_cast<MessageFrame_Base *> (msg);
+    EV<<mmsg->getPayload();
     std::string sending ="Yes";
-    if(initial && msg->getFullName() == sending){
-        EV<<"Entered!";
+    if(initial && mmsg->getPayload() == sending){
+//    if(initial && msg->getFullName() == sending){
+//        EV<<"Entered!";
         sender = true;
         if(isName("node0"))
             index = 0;
@@ -61,15 +65,19 @@ void Node::handleMessage(cMessage *msg)
     if(sender){
         if(seqNum<messages.size()){
             std::string value = byteStuffing();
-            cMessage *newMsg = new cMessage(" ");
-            newMsg->setName(value.c_str());
+//            cMessage *newMsg = new cMessage(" ");
+            MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
+//            newMsg->setName(value.c_str());
+//            newMsg->setPayload(value);
             send(newMsg, "nodeGate$o"); // send out the message
             seqNum++;
         }
     } else {
-        cMessage *ackMsg = new cMessage("ACK");
+//        cMessage *ackMsg = new cMessage("ACK");
+        MessageFrame_Base *ackMsg = new MessageFrame_Base("ACK");
         send(ackMsg, "nodeGate$o"); // send out the message
     }
+    cancelAndDelete(msg);
 }
 
 void Node::readInputFile(const char *filename)
