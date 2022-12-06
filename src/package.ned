@@ -41,6 +41,14 @@ simple Coordinator
 network Network
 {
     parameters:
+        int WS;
+        int WR;
+        double TO;
+        double PT;
+        double TD;
+        double ED;
+        double DD;
+        double LP;
         @display("bgb=859,220");
     submodules:
         coordinator: Coordinator {

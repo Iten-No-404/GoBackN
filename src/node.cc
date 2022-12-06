@@ -79,7 +79,7 @@ void Node::handleMessage(cMessage *msg)
         if(seqNum<messages.size()){
             std::string value = byteStuffing();
             MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
-            newMsg->setSeqNum(seqNum);
+            newMsg->setSeqNum(seqNum % int(getParentModule()->par("WS")));
             bits parity(std::string("00000000"));
             for(int i=0; i<value.size(); i++)
             {
