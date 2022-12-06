@@ -1,1 +1,1 @@
-Node_id=0
+Node_id=[0,1]
