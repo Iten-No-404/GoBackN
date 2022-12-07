@@ -61,12 +61,12 @@ char Coordinator::readInputFile(const char *filename)
         return -1;
     } else {
         while ( getline(filestream, line) ) {
-                EV<<line;
+//                EV<<line;
             if (line.find(',')) {
                 int beg = line.find(',');
                 chosen = line[beg-1];
                 startingTime = std::stod(line.substr(beg+1, line.size()-beg-2));
-                EV<<chosen;
+//                EV<<chosen;
                 return chosen;
 
             }

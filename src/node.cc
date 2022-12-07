@@ -109,19 +109,26 @@ void Node::handleMessage(cMessage *msg)
                     sentFlag.pop();
                 }
                 if(seqNum<messages.size()){
-                    double newDelay = lastTime;
-                    for(int i=seqBeg+sentFlag.size(); i<=seqEnd && i + seqNum <messages.size(); i++){
+                    double newDelay = lastTime - simTime().dbl();
+//                    double newDelay = 0.0;
+//                    for(int i=(seqBeg+sentFlag.size())%(int(getParentModule()->par("WS"))+1); i<=seqEnd+seqNum; i++){
+                    for(int i=sentFlag.size(); i<int(getParentModule()->par("WS")); i++){
                         if(initial){
                             newDelay += std::stod(mmsg->getPayload());
 //                            EV<<"Starting Time: ";
 //                            EV<<std::stod(mmsg->getPayload());
                             initial = false;
                         }
-                        newDelay += delays;
+                        EV<<"\ni= ";
+                        EV<<i;
                         int j = seqNum + i;
+                        EV<<"\nj= ";
+                        EV<<j;
+                        if(j >= messages.size())
+                            break;
                         std::string value = byteStuffing(j);
                         MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
-                        newMsg->setSeqNum(j%(int(getParentModule()->par("WS"))+1));
+                        newMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
                         bits parity(std::string("00000000"));
                         for(int i=0; i<value.size(); i++)
                         {
@@ -130,13 +137,13 @@ void Node::handleMessage(cMessage *msg)
                         }
                         newMsg->setParity(static_cast<char>( parity.to_ulong() ));
                         newMsg->setFrameType(0);
-//                        EV<<"Delay: ";
-//                        EV<<newDelay;
+                        newDelay += delays;
+                        EV<<"Delay: ";
+                        EV<<newDelay;
                         sendDelayed(newMsg, newDelay, "nodeGate$o"); // send out the message
                         sentFlag.push(true);
-    //                    seqNum++;
                     }
-                    lastTime = newDelay;
+                    lastTime = newDelay + simTime().dbl();
                 }
             }
             // Receiver Handler
@@ -164,8 +171,8 @@ void Node::handleMessage(cMessage *msg)
             MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
             ackMsg->setAckNum((mmsg->getSeqNum()+1)% (int(getParentModule()->par("WS"))+1));
             ackMsg->setFrameType(frameType);
-            EV<<"SimTime: ";
-            EV<<simTime().dbl();
+//            EV<<"SimTime: ";
+//            EV<<simTime().dbl();
 //            double newDelay = simTime().dbl() + delays;
             double newDelay = delays;
             EV<<"NewDelay: ";
