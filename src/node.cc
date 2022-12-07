@@ -8,6 +8,7 @@
 #include <omnetpp.h>
 #include <fstream>
 #include <vector>
+#include <queue>
 #include <bitset>
 #include "MessageFrame_m.h"
 typedef std::bitset<8> bits;
@@ -28,13 +29,19 @@ class Node : public cSimpleModule
     bool initial = true;
     int index = 0;
     int seqNum = 0;
+    int seqBeg = 0;
+    int seqEnd = 0;
+    int ackIndex;
+    double lastTime = 0.0;
+//    int seqValue = 0;
+    std::queue<bool> sentFlag;
     std::vector<std::string> errors,messages;
 
     // The following redefined virtual function holds the algorithm.
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
     void readInputFile(const char *filename);
-    std::string byteStuffing();
+    std::string byteStuffing(int seqNumber);
 };
 
 // The module class needs to be registered with OMNeT++
@@ -70,7 +77,6 @@ void Node::handleMessage(cMessage *msg)
             EV<<mmsg->getAckNum();
         }
         std::string receiving ="No";
-        EV<<mmsg->getPayload();
         if(initial && mmsg->getPayload() == receiving){
             initial = false;
             cancelAndDelete(msg);
@@ -81,27 +87,59 @@ void Node::handleMessage(cMessage *msg)
                 index = 0;
             else
                 index = 1;
-            delays += std::stod(mmsg->getPayload());
+            seqBeg = 0;
+            seqEnd = int(getParentModule()->par("WS"))-1;
+            ackIndex = int(getParentModule()->par("WS"));
+//            delays += std::stod(mmsg->getPayload());
             std::string fileName = "input"+std::to_string(index)+".txt";
             readInputFile(fileName.c_str());
-            initial = false;
+//            initial = false;
         }
         if(sender){
-            if(seqNum<messages.size()){
-                std::string value = byteStuffing();
-                MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
-                newMsg->setSeqNum(seqNum % int(getParentModule()->par("WS")));
-                bits parity(std::string("00000000"));
-                for(int i=0; i<value.size(); i++)
+            if(mmsg->getFrameType() == 1 || initial){
+                if(mmsg->getAckNum() == seqBeg+1)
                 {
-                    bits temp(value[i]);
-                    parity = parity ^ temp;
+
+                    seqBeg++;
+                    seqBeg %= (int(getParentModule()->par("WS"))+1);
+                    seqEnd++;
+                    seqEnd %= (int(getParentModule()->par("WS"))+1);
+                    seqNum++;
+//                    seqNum %= (int(getParentModule()->par("WS"))+1);
+                    sentFlag.pop();
                 }
-                newMsg->setParity(static_cast<char>( parity.to_ulong() ));
-                newMsg->setFrameType(0);
-                sendDelayed(newMsg, delays, "nodeGate$o"); // send out the message
-                seqNum++;
+                if(seqNum<messages.size()){
+                    double newDelay = lastTime;
+                    for(int i=seqBeg+sentFlag.size(); i<=seqEnd && i + seqNum <messages.size(); i++){
+                        if(initial){
+                            newDelay += std::stod(mmsg->getPayload());
+//                            EV<<"Starting Time: ";
+//                            EV<<std::stod(mmsg->getPayload());
+                            initial = false;
+                        }
+                        newDelay += delays;
+                        int j = seqNum + i;
+                        std::string value = byteStuffing(j);
+                        MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
+                        newMsg->setSeqNum(j%(int(getParentModule()->par("WS"))+1));
+                        bits parity(std::string("00000000"));
+                        for(int i=0; i<value.size(); i++)
+                        {
+                            bits temp(value[i]);
+                            parity = parity ^ temp;
+                        }
+                        newMsg->setParity(static_cast<char>( parity.to_ulong() ));
+                        newMsg->setFrameType(0);
+//                        EV<<"Delay: ";
+//                        EV<<newDelay;
+                        sendDelayed(newMsg, newDelay, "nodeGate$o"); // send out the message
+                        sentFlag.push(true);
+    //                    seqNum++;
+                    }
+                    lastTime = newDelay;
+                }
             }
+            // Receiver Handler
         } else {
             std::string name = "";
             std::string payload = mmsg->getPayload();
@@ -124,9 +162,15 @@ void Node::handleMessage(cMessage *msg)
                 frameType = 2;
             }
             MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
-            ackMsg->setAckNum((mmsg->getSeqNum()+1)% int(getParentModule()->par("WS")));
+            ackMsg->setAckNum((mmsg->getSeqNum()+1)% (int(getParentModule()->par("WS"))+1));
             ackMsg->setFrameType(frameType);
-            sendDelayed(ackMsg, delays,"nodeGate$o"); // send out the message
+            EV<<"SimTime: ";
+            EV<<simTime().dbl();
+//            double newDelay = simTime().dbl() + delays;
+            double newDelay = delays;
+            EV<<"NewDelay: ";
+            EV<<newDelay;
+            sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
         }
     }
     cancelAndDelete(msg);
@@ -164,15 +208,15 @@ void Node::readInputFile(const char *filename)
     return;
 }
 
-std::string Node::byteStuffing(){
+std::string Node::byteStuffing(int seqNumber){
     std::string s = "$";
-    for(int i=0; i<messages[seqNum].size(); i++)
+    for(int i=0; i<messages[seqNumber].size(); i++)
     {
-        if(messages[seqNum][i] == flag || messages[seqNum][i] == escape)
+        if(messages[seqNumber][i] == flag || messages[seqNumber][i] == escape)
         {
             s += escape;
         }
-        s += messages[seqNum][i];
+        s += messages[seqNumber][i];
     }
     s += flag;
     return s;
