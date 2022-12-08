@@ -34,10 +34,8 @@ class Node : public cSimpleModule
     int ackIndex;
     int stoppedTimeoutCount = 0;
     double lastTime = 0.0;
-//    int seqValue = 0;
     std::queue<bool> sentFlag;
     std::vector<std::string> errors,messages;
-
     // The following redefined virtual function holds the algorithm.
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
@@ -60,8 +58,6 @@ void Node::handleMessage(cMessage *msg)
     bool receivedAck = false;
     bool noErrors = false;
     // Check for timeouts in sender.
-//    EV<<"\nSeqNum= ";
-//    EV<<seqNum;
     if(mmsg->isSelfMessage() && seqNum<messages.size()){
         // Check if the timer was already stopped.
         EV<<"stoppedTimeoutCount: ";
@@ -128,7 +124,6 @@ void Node::handleMessage(cMessage *msg)
                 receivedAck = true;
             }
             if(seqNum<messages.size()){
-//                double newDelay = std::max( simTime().dbl(), lastTime - simTime().dbl());
                 double newDelay = 0;
                 if (lastTime - simTime().dbl() > simTime().dbl())
                     newDelay = lastTime - simTime().dbl();
@@ -145,21 +140,13 @@ void Node::handleMessage(cMessage *msg)
                     newTime = simTime().dbl();
                     receivedAck = false;
                 }
-//                EV<<"FlagSize: ";
-//                EV<<sentFlag.size();
                 for(int i=sentFlag.size(); i<int(getParentModule()->par("WS")); i++){
                     if(initial){
                         newDelay += std::stod(mmsg->getPayload());
                         newTime += std::stod(mmsg->getPayload());
-//                            EV<<"Starting Time: ";
-//                            EV<<std::stod(mmsg->getPayload());
                         initial = false;
                     }
-//                    EV<<"\ni= ";
-//                    EV<<i;
                     int j = seqNum + i;
-//                    EV<<"\nj= ";
-//                    EV<<j;
                     if(j >= messages.size())
                         break;
                     std::string value = byteStuffing(j);
@@ -167,6 +154,7 @@ void Node::handleMessage(cMessage *msg)
                     bool lossE = false;
                     bool duplicationE = false;
                     bool delayE = false;
+                    // In case of timeout, send the first message in the window error free while the other messages with their errors.
                     if(!noErrors){
                         if(errors[j][0] == '1')
                             modificationE = true;
@@ -203,7 +191,6 @@ void Node::handleMessage(cMessage *msg)
                             modifiedMsg[randomI] = ~(modifiedMsg[randomI]);
                             newMsg->setPayload(modifiedMsg);
                             newMsg->setName(modifiedMsg.c_str());
-//                            errors[j] = "0000"; // So that the modification is done only the first time.
                         }
                         if(delayE)
                             sendDelayed(newMsg, newDelay + double(getParentModule()->par("ED")), "nodeGate$o");
@@ -214,6 +201,8 @@ void Node::handleMessage(cMessage *msg)
                         else if(duplicationE)
                             sendDelayed(newMsg->dup(), newDelay + double(getParentModule()->par("DD")), "nodeGate$o"); // send out the message
                     }
+                    else
+                        cancelAndDelete(newMsg); // If the message was lost, clear its resources.
                     // Start Timer
                     MessageFrame_Base *timerMsg = new MessageFrame_Base("Timeout");
                     timerMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
@@ -226,6 +215,12 @@ void Node::handleMessage(cMessage *msg)
     // Receiver Handler
     } else {
         if(mmsg->getSeqNum() == seqNum){
+                bool ackLost = false;
+                int randomOccurance = int(uniform(0,100));
+                if((randomOccurance+1)/100.0 <= double(getParentModule()->par("LP")))
+                    ackLost = true;
+                EV<<"\nackLost: ";
+                EV<<ackLost;
                 seqNum++;
                 seqNum %= int(getParentModule()->par("WS"));
                 std::string name = "";
@@ -238,7 +233,8 @@ void Node::handleMessage(cMessage *msg)
                     bits temp(payload[i]);
                     parity = parity ^ temp;
                 }
-                if(static_cast<char>( parity.to_ulong() ) == mmsg->getParity())
+                bool sendack = static_cast<char>( parity.to_ulong() ) == mmsg->getParity();
+                if(sendack)
                 {
                     noError = true;
                     name = "ACK";
@@ -248,17 +244,25 @@ void Node::handleMessage(cMessage *msg)
                     name = "NACK";
                     frameType = 2;
                     seqNum--;
+                    seqNum += int(getParentModule()->par("WS"));
+                    seqNum %= int(getParentModule()->par("WS"));
                 }
                 MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
                 ackMsg->setAckNum((mmsg->getSeqNum()+1)%int(getParentModule()->par("WS")));
                 ackMsg->setFrameType(frameType);
-    //            EV<<"SimTime: ";
-    //            EV<<simTime().dbl();
-    //            double newDelay = simTime().dbl() + delays;
                 double newDelay = delays;
                 EV<<"NewDelay: ";
                 EV<<newDelay;
-                sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
+                if(!ackLost)
+                    sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
+                else{
+                    cancelAndDelete(ackMsg);
+                    if(sendack){
+                        seqNum--;
+                        seqNum += int(getParentModule()->par("WS"));
+                        seqNum %= int(getParentModule()->par("WS"));
+                    }
+                }
         }
     }
     cancelAndDelete(msg);
@@ -279,17 +283,10 @@ void Node::readInputFile(const char *filename)
                 continue; // ignore comment lines
             }
             else {
-//                EV<<line;
-//                EV<<"\n";
                 std::string err = line.substr(0,4);
                 errors.push_back(err);
                 std::string mes = line.substr(5);
                 messages.push_back(mes);
-//                EV<<err;
-//                EV<<"\n";
-//                EV<<mes;
-//                EV<<"\n";
-//                return line[line.size()-1];
             }
         }
     }
