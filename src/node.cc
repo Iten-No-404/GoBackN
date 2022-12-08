@@ -32,6 +32,7 @@ class Node : public cSimpleModule
     int seqBeg = 0;
     int seqEnd = 0;
     int ackIndex;
+    int stoppedTimeoutCount = 0;
     double lastTime = 0.0;
 //    int seqValue = 0;
     std::queue<bool> sentFlag;
@@ -55,129 +56,169 @@ void Node::handleMessage(cMessage *msg)
 {
     MessageFrame_Base *mmsg = check_and_cast<MessageFrame_Base *> (msg);
     double delays =  double(getParentModule()->par("PT"))+double(getParentModule()->par("TD"));
+    bool timeOut = false;
+    bool receivedAck = false;
+    // Check for timeouts in sender.
     if(mmsg->isSelfMessage()){
-//        msg->setName("Hello from Hub");
-//        int Chosen = int(uniform(0,int(getParentModule()->par("N"))));
-//        double interval = exponential(2.0);
-//        scheduleAt(simTime() + interval, new cMessage(""));
-//        send(msg, "port$o", Chosen);
+        // Check if the timer was already stopped.
+        EV<<"stoppedTimeoutCount: ";
+        EV<<stoppedTimeoutCount;
+        if(stoppedTimeoutCount>0)
+            stoppedTimeoutCount--;
+        else {
+            EV<<"Timeout!!!";
+            timeOut = true;
+            while(!sentFlag.empty())
+            {
+                sentFlag.pop();
+                stoppedTimeoutCount++;
+            }
+            stoppedTimeoutCount--;
+        }
+    }
+    EV<<mmsg->getFrameType();
+    if(!sender){
+        EV<<"\nSeqNo: ";
+        EV<<mmsg->getSeqNum();
+        EV<<"\nPayload: ";
+        EV<<mmsg->getPayload();
+        EV<<"\nParity: ";
+        EV<<bits(mmsg->getParity()).to_string();
     }
     else {
-        EV<<mmsg->getFrameType();
-        if(!sender){
-            EV<<"\nSeqNo: ";
-            EV<<mmsg->getSeqNum();
-            EV<<"\nPayload: ";
-            EV<<mmsg->getPayload();
-            EV<<"\nParity: ";
-            EV<<bits(mmsg->getParity()).to_string();
-        }
-        else {
-            EV<<"\nAckNo: ";
-            EV<<mmsg->getAckNum();
-        }
-        std::string receiving ="No";
-        if(initial && mmsg->getPayload() == receiving){
-            initial = false;
-            cancelAndDelete(msg);
-            return;
-        } else if(initial) {
-            sender = true;
-            if(isName("node0"))
-                index = 0;
-            else
-                index = 1;
-            seqBeg = 0;
-            seqEnd = int(getParentModule()->par("WS"))-1;
-            ackIndex = int(getParentModule()->par("WS"));
-//            delays += std::stod(mmsg->getPayload());
-            std::string fileName = "input"+std::to_string(index)+".txt";
-            readInputFile(fileName.c_str());
-//            initial = false;
-        }
-        if(sender){
-            if(mmsg->getFrameType() == 1 || initial){
-                if(mmsg->getAckNum() == seqBeg+1)
-                {
-
-                    seqBeg++;
-                    seqBeg %= (int(getParentModule()->par("WS"))+1);
-                    seqEnd++;
-                    seqEnd %= (int(getParentModule()->par("WS"))+1);
-                    seqNum++;
-//                    seqNum %= (int(getParentModule()->par("WS"))+1);
-                    sentFlag.pop();
+        EV<<"\nAckNo: ";
+        EV<<mmsg->getAckNum();
+    }
+    // Initialize sender and receiver settings.
+    std::string receiving ="No";
+    if(initial && mmsg->getPayload() == receiving){
+        initial = false;
+        cancelAndDelete(msg);
+        return;
+    } else if(initial) {
+        sender = true;
+        if(isName("node0"))
+            index = 0;
+        else
+            index = 1;
+        seqBeg = 0;
+        seqEnd = int(getParentModule()->par("WS"))-1;
+        ackIndex = int(getParentModule()->par("WS"));
+        std::string fileName = "input"+std::to_string(index)+".txt";
+        readInputFile(fileName.c_str());
+    }
+    // Sender handler.
+    if(sender){
+        // Send messages in 3 cases: Initial state, Timeout State & Receiving the correct ACK(since we move the window).
+        if(mmsg->getFrameType() == 1 || initial || timeOut){
+            // Check if the received ACK is the one the sender is waiting for.
+            if(!timeOut && mmsg->getAckNum() == seqBeg+1)
+            {
+                seqBeg++;
+                seqBeg %= (int(getParentModule()->par("WS"))+1);
+                seqEnd++;
+                seqEnd %= (int(getParentModule()->par("WS"))+1);
+                seqNum++;
+                stoppedTimeoutCount++;
+                sentFlag.pop();
+                receivedAck = true;
+            }
+            if(seqNum<messages.size()){
+//                double newDelay = std::max( simTime().dbl(), lastTime - simTime().dbl());
+                double newDelay = 0;
+                if (lastTime - simTime().dbl() > simTime().dbl())
+                    newDelay = lastTime - simTime().dbl();
+                else
+                    newDelay = 0;
+                double newTime = newDelay;
+                if(timeOut){
+                    newDelay = 0;
+                    newTime = simTime().dbl();
+                    timeOut = false;
                 }
-                if(seqNum<messages.size()){
-                    double newDelay = lastTime - simTime().dbl();
-//                    double newDelay = 0.0;
-//                    for(int i=(seqBeg+sentFlag.size())%(int(getParentModule()->par("WS"))+1); i<=seqEnd+seqNum; i++){
-                    for(int i=sentFlag.size(); i<int(getParentModule()->par("WS")); i++){
-                        if(initial){
-                            newDelay += std::stod(mmsg->getPayload());
+                if(receivedAck){
+                    newDelay = lastTime - simTime().dbl();
+                    newTime = lastTime;
+                    receivedAck = false;
+                }
+//                EV<<"FlagSize: ";
+//                EV<<sentFlag.size();
+                for(int i=sentFlag.size(); i<int(getParentModule()->par("WS")); i++){
+                    if(initial){
+                        newDelay += std::stod(mmsg->getPayload());
+                        newTime += std::stod(mmsg->getPayload());
 //                            EV<<"Starting Time: ";
 //                            EV<<std::stod(mmsg->getPayload());
-                            initial = false;
-                        }
-                        EV<<"\ni= ";
-                        EV<<i;
-                        int j = seqNum + i;
-                        EV<<"\nj= ";
-                        EV<<j;
-                        if(j >= messages.size())
-                            break;
-                        std::string value = byteStuffing(j);
-                        MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
-                        newMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
-                        bits parity(std::string("00000000"));
-                        for(int i=0; i<value.size(); i++)
-                        {
-                            bits temp(value[i]);
-                            parity = parity ^ temp;
-                        }
-                        newMsg->setParity(static_cast<char>( parity.to_ulong() ));
-                        newMsg->setFrameType(0);
-                        newDelay += delays;
-                        EV<<"Delay: ";
-                        EV<<newDelay;
-                        sendDelayed(newMsg, newDelay, "nodeGate$o"); // send out the message
-                        sentFlag.push(true);
+                        initial = false;
                     }
-                    lastTime = newDelay + simTime().dbl();
+//                    EV<<"\ni= ";
+//                    EV<<i;
+                    int j = seqNum + i;
+//                    EV<<"\nj= ";
+//                    EV<<j;
+                    if(j >= messages.size())
+                        break;
+                    std::string value = byteStuffing(j);
+                    MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
+                    newMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
+                    bits parity(std::string("00000000"));
+                    for(int i=0; i<value.size(); i++)
+                    {
+                        bits temp(value[i]);
+                        parity = parity ^ temp;
+                    }
+                    newMsg->setParity(static_cast<char>( parity.to_ulong() ));
+                    newMsg->setFrameType(0);
+                    newDelay += delays;
+                    newTime += delays;
+                    EV<<"\nDelay: ";
+                    EV<<newDelay;
+                    EV<<"\nSchedule At: ";
+                    double temp = (newTime + double(getParentModule()->par("TO")));
+                    EV<<temp;
+                    sendDelayed(newMsg, newDelay, "nodeGate$o"); // send out the message
+                    // Start Timer
+                    MessageFrame_Base *timerMsg = new MessageFrame_Base("Timeout");
+                    timerMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
+                    scheduleAt(newTime + double(getParentModule()->par("TO")), timerMsg);
+                    sentFlag.push(true);
                 }
+                lastTime = newDelay + simTime().dbl();
             }
-            // Receiver Handler
-        } else {
-            std::string name = "";
-            std::string payload = mmsg->getPayload();
-            bool noError = false;
-            int frameType = 2;
-            bits parity(std::string("00000000"));
-            for(int i=0; i<payload.size(); i++)
-            {
-                bits temp(payload[i]);
-                parity = parity ^ temp;
-            }
-            if(static_cast<char>( parity.to_ulong() ) == mmsg->getParity())
-            {
-                noError = true;
-                name = "ACK";
-                frameType = 1;
-            } else {
-                noError = false;
-                name = "NACK";
-                frameType = 2;
-            }
-            MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
-            ackMsg->setAckNum((mmsg->getSeqNum()+1)% (int(getParentModule()->par("WS"))+1));
-            ackMsg->setFrameType(frameType);
-//            EV<<"SimTime: ";
-//            EV<<simTime().dbl();
-//            double newDelay = simTime().dbl() + delays;
-            double newDelay = delays;
-            EV<<"NewDelay: ";
-            EV<<newDelay;
-            sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
+        }
+    // Receiver Handler
+    } else {
+        if(simTime().dbl() == 2.5 || simTime().dbl() == 15.5){
+                std::string name = "";
+                std::string payload = mmsg->getPayload();
+                bool noError = false;
+                int frameType = 2;
+                bits parity(std::string("00000000"));
+                for(int i=0; i<payload.size(); i++)
+                {
+                    bits temp(payload[i]);
+                    parity = parity ^ temp;
+                }
+                if(static_cast<char>( parity.to_ulong() ) == mmsg->getParity())
+                {
+                    noError = true;
+                    name = "ACK";
+                    frameType = 1;
+                } else {
+                    noError = false;
+                    name = "NACK";
+                    frameType = 2;
+                }
+                MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
+                ackMsg->setAckNum((mmsg->getSeqNum()+1)% (int(getParentModule()->par("WS"))+1));
+                ackMsg->setFrameType(frameType);
+    //            EV<<"SimTime: ";
+    //            EV<<simTime().dbl();
+    //            double newDelay = simTime().dbl() + delays;
+                double newDelay = delays;
+                EV<<"NewDelay: ";
+                EV<<newDelay;
+                sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
         }
     }
     cancelAndDelete(msg);
