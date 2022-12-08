@@ -58,6 +58,7 @@ void Node::handleMessage(cMessage *msg)
     double delays =  double(getParentModule()->par("PT"))+double(getParentModule()->par("TD"));
     bool timeOut = false;
     bool receivedAck = false;
+    bool noErrors = false;
     // Check for timeouts in sender.
 //    EV<<"\nSeqNum= ";
 //    EV<<seqNum;
@@ -70,6 +71,7 @@ void Node::handleMessage(cMessage *msg)
         else {
             EV<<"Timeout!!!";
             timeOut = true;
+            noErrors = true;
             while(!sentFlag.empty())
             {
                 sentFlag.pop();
@@ -114,12 +116,12 @@ void Node::handleMessage(cMessage *msg)
         // Send messages in 3 cases: Initial state, Timeout State & Receiving the correct ACK(since we move the window).
         if(mmsg->getFrameType() == 1 || initial || timeOut){
             // Check if the received ACK is the one the sender is waiting for.
-            if(!timeOut && mmsg->getAckNum() == (seqBeg+1)%(int(getParentModule()->par("WS"))+1))
+            if(!timeOut && mmsg->getAckNum() == (seqBeg+1)%int(getParentModule()->par("WS")))
             {
                 seqBeg++;
-                seqBeg %= (int(getParentModule()->par("WS"))+1);
+                seqBeg %= (int(getParentModule()->par("WS")));
                 seqEnd++;
-                seqEnd %= (int(getParentModule()->par("WS"))+1);
+                seqEnd %= (int(getParentModule()->par("WS")));
                 seqNum++;
                 stoppedTimeoutCount++;
                 sentFlag.pop();
@@ -165,17 +167,20 @@ void Node::handleMessage(cMessage *msg)
                     bool lossE = false;
                     bool duplicationE = false;
                     bool delayE = false;
-                    if(errors[j][0] == '1')
-                        modificationE = true;
-                    if(errors[j][1] == '1')
-                        lossE = true;
-                    if(errors[j][2] == '1')
-                        duplicationE = true;
-                    if(errors[j][3] == '1')
-                        delayE = true;
+                    if(!noErrors){
+                        if(errors[j][0] == '1')
+                            modificationE = true;
+                        if(errors[j][1] == '1')
+                            lossE = true;
+                        if(errors[j][2] == '1')
+                            duplicationE = true;
+                        if(errors[j][3] == '1')
+                            delayE = true;
+                    }
+                    noErrors = false;
                     MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
                     newMsg->setPayload(value);
-                    newMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
+                    newMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
                     bits parity(std::string("00000000"));
                     for(int i=0; i<value.size(); i++)
                     {
@@ -198,7 +203,7 @@ void Node::handleMessage(cMessage *msg)
                             modifiedMsg[randomI] = ~(modifiedMsg[randomI]);
                             newMsg->setPayload(modifiedMsg);
                             newMsg->setName(modifiedMsg.c_str());
-                            errors[j] = "0000"; // So that the modification is done only the first time.
+//                            errors[j] = "0000"; // So that the modification is done only the first time.
                         }
                         if(delayE)
                             sendDelayed(newMsg, newDelay + double(getParentModule()->par("ED")), "nodeGate$o");
@@ -209,11 +214,9 @@ void Node::handleMessage(cMessage *msg)
                         else if(duplicationE)
                             sendDelayed(newMsg->dup(), newDelay + double(getParentModule()->par("DD")), "nodeGate$o"); // send out the message
                     }
-                    else
-                        errors[j] = "0000";    // Lose it the first time only.
                     // Start Timer
                     MessageFrame_Base *timerMsg = new MessageFrame_Base("Timeout");
-                    timerMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
+                    timerMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
                     scheduleAt(newTime + double(getParentModule()->par("TO")), timerMsg);
                     sentFlag.push(true);
                 }
@@ -224,7 +227,7 @@ void Node::handleMessage(cMessage *msg)
     } else {
         if(mmsg->getSeqNum() == seqNum){
                 seqNum++;
-                seqNum %= (int(getParentModule()->par("WS"))+1);
+                seqNum %= int(getParentModule()->par("WS"));
                 std::string name = "";
                 std::string payload = mmsg->getPayload();
                 bool noError = false;
@@ -247,7 +250,7 @@ void Node::handleMessage(cMessage *msg)
                     seqNum--;
                 }
                 MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
-                ackMsg->setAckNum((mmsg->getSeqNum()+1)% (int(getParentModule()->par("WS"))+1));
+                ackMsg->setAckNum((mmsg->getSeqNum()+1)%int(getParentModule()->par("WS")));
                 ackMsg->setFrameType(frameType);
     //            EV<<"SimTime: ";
     //            EV<<simTime().dbl();
