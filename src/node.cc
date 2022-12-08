@@ -173,8 +173,8 @@ void Node::handleMessage(cMessage *msg)
                         duplicationE = true;
                     if(errors[j][3] == '1')
                         delayE = true;
-
                     MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
+                    newMsg->setPayload(value);
                     newMsg->setSeqNum((seqBeg+i)%(int(getParentModule()->par("WS"))+1));
                     bits parity(std::string("00000000"));
                     for(int i=0; i<value.size(); i++)
@@ -192,6 +192,14 @@ void Node::handleMessage(cMessage *msg)
                     double temp = (newTime + double(getParentModule()->par("TO")));
                     EV<<temp;
                     if(!lossE){
+                        if(modificationE){
+                            std::string modifiedMsg = newMsg->getPayload();
+                            int randomI = int(uniform(0,modifiedMsg.size()));
+                            modifiedMsg[randomI] = ~(modifiedMsg[randomI]);
+                            newMsg->setPayload(modifiedMsg);
+                            newMsg->setName(modifiedMsg.c_str());
+                            errors[j] = "0000"; // So that the modification is done only the first time.
+                        }
                         if(delayE)
                             sendDelayed(newMsg, newDelay + double(getParentModule()->par("ED")), "nodeGate$o");
                         else
@@ -236,6 +244,7 @@ void Node::handleMessage(cMessage *msg)
                     noError = false;
                     name = "NACK";
                     frameType = 2;
+                    seqNum--;
                 }
                 MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
                 ackMsg->setAckNum((mmsg->getSeqNum()+1)% (int(getParentModule()->par("WS"))+1));
