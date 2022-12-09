@@ -1,0 +1,80 @@
+At time 1.0, Node0 , Introducing channel error with code=1010 .
+At time 1.5, Node0 sent frame with seq_num=0 and payload=$A flwer, sometimes$ and trailer=00011010 , Modified 44 ,Lost No, Duplicate 1, Delay 0.0.
+At time 1.5, Node0 sent frame with seq_num=0 and payload=$A flwer, sometimes$ and trailer=00011010 , Modified 44 ,Lost No, Duplicate 2, Delay 0.0.
+At time 1.5, Node0 , Introducing channel error with code=0000 .
+At time 2.0, Node0 sent frame with seq_num=1 and payload=$known as a bloom or blossom in flowering plants$ and trailer=01101011 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 2.0, Node0 , Introducing channel error with code=0100 .
+At time 2.5, Node1 received frame with seq_num=0 and payload=$A flwer, sometimes$ and trailer=00011010 , Modified 0 ,Lost No.
+At time 2.5, Node0 sent frame with seq_num=2 and payload=$is the reproductive/$ structure found  also called// angiosperm/$).$ and trailer=01100100 , Modified 0 ,Lost Yes, Duplicate 0, Delay 0.0.
+At time 2.5, Node0 , Introducing channel error with code=0000 .
+At time 2.6, Node1 received frame with seq_num=0 and payload=$A flwer, sometimes$ and trailer=00011010 , Modified 0 ,Lost No.
+At time 3.0, Node1 received frame with seq_num=1 and payload=$known as a bloom or blossom in flowering plants$ and trailer=01101011 , Modified 0 ,Lost No.
+At time 3.0, Node0 sent frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 3.0, Node0 , Introducing channel error with code=0001 .
+At time 3.0, Node1 Sending NACK with number 1 , loss No
+At time 3.1, Node1 Sending NACK with number 1 , loss No
+At time 3.5, Node0 sent frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No, Duplicate 0, Delay 4.0.
+At time 4.0, Node1 received frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No.
+At time 8.5, Node1 received frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No.
+Time out event at time 11.5, at Node0 for frame with seq_num=0
+At time 11.5, Node0 , Introducing channel error with code=0000 .
+At time 12.0, Node0 sent frame with seq_num=0 and payload=$A flower, sometimes$ and trailer=00011010 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 12.0, Node0 , Introducing channel error with code=0000 .
+At time 12.5, Node0 sent frame with seq_num=1 and payload=$known as a bloom or blossom in flowering plants$ and trailer=01101011 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 12.5, Node0 , Introducing channel error with code=0100 .
+At time 13.0, Node1 received frame with seq_num=0 and payload=$A flower, sometimes$ and trailer=00011010 , Modified 0 ,Lost No.
+At time 13.0, Node0 sent frame with seq_num=2 and payload=$is the reproductive/$ structure found  also called// angiosperm/$).$ and trailer=01100100 , Modified 0 ,Lost Yes, Duplicate 0, Delay 0.0.
+At time 13.0, Node0 , Introducing channel error with code=0000 .
+At time 13.5, Node1 received frame with seq_num=1 and payload=$known as a bloom or blossom in flowering plants$ and trailer=01101011 , Modified 0 ,Lost No.
+At time 13.5, Node0 sent frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 13.5, Node0 , Introducing channel error with code=0001 .
+At time 13.5, Node1 Sending ACK with number 1 , loss No
+At time 14.0, Node0 sent frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No, Duplicate 0, Delay 4.0.
+At time 14.0, Node1 Sending ACK with number 2 , loss No
+At time 14.5, Node1 received frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No.
+At time 14.5, Node0 , Introducing channel error with code=0100 .
+At time 15.0, Node0 , Introducing channel error with code=0000 .
+At time 15.0, Node0 sent frame with seq_num=0 and payload=$usually by providing a mechanism for Flowers may facilitate outcrossing/$$ and trailer=00010011 , Modified 0 ,Lost Yes, Duplicate 0, Delay 0.0.
+At time 15.5, Node0 sent frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 16.5, Node1 received frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No.
+At time 19.0, Node1 received frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No.
+Time out event at time 23.0, at Node0 for frame with seq_num=2
+At time 23.0, Node0 , Introducing channel error with code=0000 .
+At time 23.5, Node0 sent frame with seq_num=2 and payload=$is the reproductive/$ structure found  also called// angiosperm/$).$ and trailer=01100100 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 23.5, Node0 , Introducing channel error with code=0000 .
+At time 24.0, Node0 sent frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 24.0, Node0 , Introducing channel error with code=0001 .
+At time 24.5, Node1 received frame with seq_num=2 and payload=$is the reproductive/$ structure found  also called// angiosperm/$).$ and trailer=01100100 , Modified 0 ,Lost No.
+At time 24.5, Node0 sent frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No, Duplicate 0, Delay 4.0.
+At time 24.5, Node0 , Introducing channel error with code=0100 .
+At time 25.0, Node1 received frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No.
+At time 25.0, Node0 sent frame with seq_num=0 and payload=$usually by providing a mechanism for Flowers may facilitate outcrossing/$$ and trailer=00010011 , Modified 0 ,Lost Yes, Duplicate 0, Delay 0.0.
+At time 25.0, Node0 , Introducing channel error with code=0000 .
+At time 25.0, Node1 Sending ACK with number 3 , loss No
+At time 25.5, Node0 sent frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 25.5, Node1 Sending ACK with number 4 , loss Yes
+At time 26.5, Node1 received frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No.
+At time 29.5, Node1 received frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No.
+Time out event at time 34.0, at Node0 for frame with seq_num=3
+At time 34.0, Node0 , Introducing channel error with code=0000 .
+At time 34.5, Node0 sent frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 34.5, Node0 , Introducing channel error with code=0001 .
+At time 35.0, Node0 sent frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No, Duplicate 0, Delay 4.0.
+At time 35.0, Node0 , Introducing channel error with code=0100 .
+At time 35.5, Node1 received frame with seq_num=3 and payload=$(plants of the division Mangoliophyta,  is to facilitate reproduction,$ and trailer=00101000 , Modified 0 ,Lost No.
+At time 35.5, Node0 sent frame with seq_num=0 and payload=$usually by providing a mechanism for Flowers may facilitate outcrossing/$$ and trailer=00010011 , Modified 0 ,Lost Yes, Duplicate 0, Delay 0.0.
+At time 35.5, Node0 , Introducing channel error with code=0000 .
+At time 36.0, Node0 sent frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 36.0, Node1 Sending ACK with number 4 , loss No
+At time 37.0, Node1 received frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No.
+At time 40.0, Node1 received frame with seq_num=4 and payload=$The biologoical function of /$//a flower$ and trailer=01110101 , Modified 0 ,Lost No.
+At time 40.5, Node1 Sending ACK with number 0 , loss No
+Time out event at time 45.5, at Node0 for frame with seq_num=0
+At time 45.5, Node0 , Introducing channel error with code=0000 .
+At time 46.0, Node0 sent frame with seq_num=0 and payload=$usually by providing a mechanism for Flowers may facilitate outcrossing/$$ and trailer=00010011 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 46.0, Node0 , Introducing channel error with code=0000 .
+At time 46.5, Node0 sent frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No, Duplicate 0, Delay 0.0.
+At time 47.0, Node1 received frame with seq_num=0 and payload=$usually by providing a mechanism for Flowers may facilitate outcrossing/$$ and trailer=00010011 , Modified 0 ,Lost No.
+At time 47.5, Node1 received frame with seq_num=1 and payload=$/$/$the union of sperm with eggs.$ and trailer=01100000 , Modified 0 ,Lost No.
+At time 47.5, Node1 Sending ACK with number 1 , loss No
+At time 48.0, Node1 Sending ACK with number 2 , loss No

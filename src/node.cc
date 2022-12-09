@@ -31,7 +31,6 @@ class Node : public cSimpleModule
     int seqNum = 0;
     int seqBeg = 0;
     int seqEnd = 0;
-    int ackIndex;
     int stoppedTimeoutCount = 0;
     double lastTime = 0.0;
     std::queue<bool> sentFlag;
@@ -40,6 +39,11 @@ class Node : public cSimpleModule
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
     void readInputFile(const char *filename);
+    void writeOutputFile(const char *filename, std::string logMessage);
+    std::string writeOutputFileBP(const char *filename, double startingPT, int j, bool write=true);
+    std::string writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool lost, int duplicate, double delay, bool write=true);
+    std::string writeOutputFileTO(const char *filename, double timeoutTime, int seqNumber, bool write=true);
+    std::string writeOutputFileCF(const char *filename, double startingTR, bool nack, int ackNum, bool loss, bool write=true);
     std::string byteStuffing(int seqNumber);
 };
 
@@ -57,17 +61,26 @@ void Node::handleMessage(cMessage *msg)
     bool timeOut = false;
     bool receivedAck = false;
     bool noErrors = false;
+    // For logging purposes.
+    std::string log;
+    if(mmsg->isSelfMessage() && mmsg->getFrameType() == -1){
+        writeOutputFile("output.txt", mmsg->getPayload());
+        EV<<mmsg->getPayload();
+        cancelAndDelete(msg);
+        return;
     // Check for timeouts in sender.
-    if(mmsg->isSelfMessage() && seqNum<messages.size()){
+    } else if(mmsg->isSelfMessage() && seqNum<messages.size()){
         // Check if the timer was already stopped.
-        EV<<"stoppedTimeoutCount: ";
-        EV<<stoppedTimeoutCount;
+//        EV<<"stoppedTimeoutCount: ";
+//        EV<<stoppedTimeoutCount;
         if(stoppedTimeoutCount>0)
             stoppedTimeoutCount--;
         else {
-            EV<<"Timeout!!!";
+//            EV<<"Timeout!!!";
             timeOut = true;
             noErrors = true;
+            log = writeOutputFileTO("output.txt", simTime().dbl(), seqNum%int(getParentModule()->par("WS")));
+            EV<<log;
             while(!sentFlag.empty())
             {
                 sentFlag.pop();
@@ -76,24 +89,28 @@ void Node::handleMessage(cMessage *msg)
             stoppedTimeoutCount--;
         }
     }
-    EV<<mmsg->getFrameType();
-    if(!sender){
-        EV<<"\nSeqNo: ";
-        EV<<mmsg->getSeqNum();
-        EV<<"\nPayload: ";
-        EV<<mmsg->getPayload();
-        EV<<"\nParity: ";
-        EV<<bits(mmsg->getParity()).to_string();
-    }
-    else {
-        EV<<"\nAckNo: ";
-        EV<<mmsg->getAckNum();
-    }
+//    EV<<mmsg->getFrameType();
+//    if(!sender){
+//        EV<<"\nSeqNo: ";
+//        EV<<mmsg->getSeqNum();
+//        EV<<"\nPayload: ";
+//        EV<<mmsg->getPayload();
+//        EV<<"\nParity: ";
+//        EV<<bits(mmsg->getParity()).to_string();
+//    }
+//    else {
+//        EV<<"\nAckNo: ";
+//        EV<<mmsg->getAckNum();
+//    }
     // Initialize sender and receiver settings.
     std::string receiving ="No";
     if(initial && mmsg->getPayload() == receiving){
         initial = false;
         cancelAndDelete(msg);
+        if(isName("node0"))
+            index = 0;
+        else
+            index = 1;
         return;
     } else if(initial) {
         sender = true;
@@ -103,7 +120,6 @@ void Node::handleMessage(cMessage *msg)
             index = 1;
         seqBeg = 0;
         seqEnd = int(getParentModule()->par("WS"))-1;
-        ackIndex = int(getParentModule()->par("WS"));
         std::string fileName = "input"+std::to_string(index)+".txt";
         readInputFile(fileName.c_str());
     }
@@ -163,6 +179,8 @@ void Node::handleMessage(cMessage *msg)
                         if(errors[j][3] == '1')
                             delayE = true;
                     }
+                    else
+                        errors[j] = "0000";
                     noErrors = false;
                     MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
                     newMsg->setPayload(value);
@@ -177,18 +195,32 @@ void Node::handleMessage(cMessage *msg)
                     newMsg->setFrameType(0);
                     newDelay += delays;
                     newTime += double(getParentModule()->par("PT"));
-                    EV<<"\nDelay: ";
-                    EV<<newDelay;
-                    EV<<"\nSchedule At: ";
+//                    EV<<"\nDelay: ";
+//                    EV<<newDelay;
+//                    EV<<"\nSchedule At: ";
                     double temp = (newTime + double(getParentModule()->par("TO")));
-                    EV<<temp;
+//                    EV<<temp;
+                    // Variable to ease printing logs
+                    int duplicate = 0;
+                    if(duplicationE)
+                        duplicate = 1;
+                    int seqNumber = (seqBeg+i)%int(getParentModule()->par("WS"));
+                    int errorDelay = double(getParentModule()->par("ED"));
+                    std::string payload = newMsg->getPayload();
+                    std::string trailer = bits(newMsg->getParity()).to_string();
+                    int modifiedBitNumber = 0;
                     if(!lossE){
                         if(modificationE){
                             std::string modifiedMsg = newMsg->getPayload();
                             int randomI = int(uniform(0,modifiedMsg.size()));
-                            modifiedMsg[randomI] = ~(modifiedMsg[randomI]);
+                            bits modifiedBits(modifiedMsg[randomI]);
+                            int randomBit = int(uniform(0,8));
+                            modifiedBits[randomBit] = ~modifiedBits[randomBit];
+                            modifiedMsg[randomI] = static_cast<char>( modifiedBits.to_ulong());
                             newMsg->setPayload(modifiedMsg);
                             newMsg->setName(modifiedMsg.c_str());
+                            payload = modifiedMsg;
+                            modifiedBitNumber = 8*randomI + randomBit;
                         }
                         if(delayE)
                             sendDelayed(newMsg, newDelay + double(getParentModule()->par("ED")), "nodeGate$o");
@@ -201,6 +233,51 @@ void Node::handleMessage(cMessage *msg)
                     }
                     else
                         cancelAndDelete(newMsg); // If the message was lost, clear its resources.
+                    if(simTime().dbl() + newDelay - delays != simTime().dbl()){
+                        std::string m;
+                        m = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j, false);
+                        MessageFrame_Base *logMsg = new MessageFrame_Base("");
+                        logMsg->setPayload(m);
+                        logMsg->setFrameType(-1);
+                        scheduleAt(simTime().dbl() + newDelay - delays, logMsg);
+                    }
+                    else
+                    {
+                        log = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j);
+                        EV<<log;
+                    }
+                    if(simTime().dbl() != newTime){
+                        std::string m1, m2;
+                        if(delayE)
+                            m1 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, errorDelay, false);
+                        else
+                            m1 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, 0.0, false);
+                        MessageFrame_Base *logMsg1 = new MessageFrame_Base("");
+                        logMsg1->setPayload(m1);
+                        logMsg1->setFrameType(-1);
+                        scheduleAt(newTime, logMsg1);
+                        if(delayE && duplicationE)
+                            m2 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, errorDelay, false);
+                        else if(duplicationE)
+                            m2 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, 0.0, false);
+                        if(duplicationE){
+                            MessageFrame_Base *logMsg2 = new MessageFrame_Base("");
+                            logMsg2->setPayload(m2);
+                            logMsg2->setFrameType(-1);
+                            scheduleAt(newTime, logMsg2);
+                        }
+                    } else {
+                        if(delayE)
+                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, errorDelay);
+                        else
+                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, 0.0);
+                        EV<<log;
+                        if(delayE && duplicationE)
+                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, errorDelay);
+                        else if(duplicationE)
+                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, 0.0);
+                        EV<<log;
+                    }
                     // Start Timer
                     MessageFrame_Base *timerMsg = new MessageFrame_Base("Timeout");
                     timerMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
@@ -213,13 +290,21 @@ void Node::handleMessage(cMessage *msg)
         }
     // Receiver Handler
     } else {
+        // Variable to ease printing logs
+        int duplicate = 0;
+        int errorDelay = 0;// double(getParentModule()->par("ED"));
+        int modifiedBitNumber = 0;
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////modifiedBitNumber/////////duplicateNum///
+        log = writeOutputFileBT("output.txt", simTime().dbl(), "received", mmsg->getSeqNum(), mmsg->getPayload(), bits(mmsg->getParity()).to_string(), modifiedBitNumber, false, duplicate, errorDelay);
+        EV<<log;
         if(mmsg->getSeqNum() == seqNum){
                 bool ackLost = false;
                 int randomOccurance = int(uniform(0,100));
+                // Uncomment after finishing.
                 if((randomOccurance+1)/100.0 <= double(getParentModule()->par("LP")))
                     ackLost = true;
-                EV<<"\nackLost: ";
-                EV<<ackLost;
+//                EV<<"\nackLost: ";
+//                EV<<ackLost;
                 seqNum++;
                 seqNum %= int(getParentModule()->par("WS"));
                 std::string name = "";
@@ -250,11 +335,24 @@ void Node::handleMessage(cMessage *msg)
                 ackMsg->setAckNum((mmsg->getSeqNum()+1)%int(getParentModule()->par("WS")));
                 ackMsg->setFrameType(frameType);
                 double newDelay = delays;
-                EV<<"NewDelay: ";
-                EV<<newDelay;
-                if(!ackLost)
+//                EV<<"NewDelay: ";
+//                EV<<newDelay;
+                if(!ackLost){
                     sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
+                    std::string m;
+                    m = writeOutputFileCF("output.txt", simTime().dbl() + double(getParentModule()->par("PT")), !sendack, ackMsg->getAckNum(), ackLost, false);
+                    MessageFrame_Base *logMsg = new MessageFrame_Base("");
+                    logMsg->setPayload(m);
+                    logMsg->setFrameType(-1);
+                    scheduleAt(simTime().dbl() + double(getParentModule()->par("PT")), logMsg);
+                }
                 else{
+                    std::string m;
+                    m = writeOutputFileCF("output.txt", simTime().dbl() + double(getParentModule()->par("PT")), !sendack, ackMsg->getAckNum(), ackLost, false);
+                    MessageFrame_Base *logMsg = new MessageFrame_Base("");
+                    logMsg->setPayload(m);
+                    logMsg->setFrameType(-1);
+                    scheduleAt(simTime().dbl() + double(getParentModule()->par("PT")), logMsg);
                     cancelAndDelete(ackMsg);
                     if(sendack){
                         seqNum--;
@@ -289,6 +387,7 @@ void Node::readInputFile(const char *filename)
             }
         }
     }
+    filestream.close();
     return;
 }
 
@@ -304,4 +403,89 @@ std::string Node::byteStuffing(int seqNumber){
     }
     s += flag;
     return s;
+}
+
+void Node::writeOutputFile(const char *filename, std::string logMessage){
+    std::ofstream filestream;
+    filestream.open(filename, std::ios_base::app);
+    if(!filestream) {
+        throw cRuntimeError("Error opening file '%s'?", filename);
+    } else {
+        filestream.write(logMessage.c_str(), logMessage.size());
+    }
+    filestream.close();
+    return;
+}
+
+std::string Node::writeOutputFileBP(const char *filename, double startingPT, int j, bool write)
+{
+    std::ofstream filestream;
+    std::string line = "At time "+std::to_string(int(startingPT))+"."+std::to_string(int((startingPT-int(startingPT))*10))+", Node"+std::to_string(index)+" , Introducing channel error with code="+errors[j]+" .\n";
+    filestream.open(filename, std::ios_base::app);
+    if(!filestream) {
+        throw cRuntimeError("Error opening file '%s'?", filename);
+    } else {
+        if(write)
+            filestream.write(line.c_str(), line.size());
+    }
+    filestream.close();
+    return line;
+}
+
+std::string Node::writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool lost, int duplicate, double delay, bool write){
+    std::ofstream filestream;
+    std::string line = "At time "+std::to_string(int(startingTR))+"."+std::to_string(int((startingTR-int(startingTR))*10))+", Node"+std::to_string(index)+" "+verb+" frame with ";
+    line += "seq_num="+std::to_string(seqNumber)+" and payload="+payload+" and trailer="+trailer+" , Modified "+std::to_string(modified)+" ,Lost ";
+    if(lost)
+        line+= "Yes";
+    else
+        line+= "No";
+    if(sender)
+        line += ", Duplicate "+std::to_string(duplicate)+", Delay "+std::to_string(int(delay))+"."+std::to_string(int((delay-int(delay))*10))+".\n";
+    else
+        line += ".\n";
+    filestream.open(filename, std::ios_base::app);
+    if(!filestream) {
+        throw cRuntimeError("Error opening file '%s'?", filename);
+    } else {
+        if(write)
+            filestream.write(line.c_str(), line.size());
+    }
+    filestream.close();
+    return line;
+}
+std::string Node::writeOutputFileTO(const char *filename, double timeoutTime, int seqNumber, bool write){
+    std::ofstream filestream;
+    std::string line = "Time out event at time "+std::to_string(int(timeoutTime))+"."+std::to_string(int((timeoutTime-int(timeoutTime))*10))+", at Node"+std::to_string(index)+" for frame with seq_num="+std::to_string(seqNumber)+"\n";
+    filestream.open(filename, std::ios_base::app);
+    if(!filestream) {
+        throw cRuntimeError("Error opening file '%s'?", filename);
+    } else {
+        if(write)
+            filestream.write(line.c_str(), line.size());
+    }
+    filestream.close();
+    return line;
+}
+std::string Node::writeOutputFileCF(const char *filename, double startingTR, bool nack, int ackNum, bool loss, bool write){
+    std::ofstream filestream;
+    std::string line = "At time "+std::to_string(int(startingTR))+"."+std::to_string(int((startingTR-int(startingTR))*10))+", Node"+std::to_string(index)+" Sending ";
+    if(nack)
+        line += "NACK";
+    else
+        line += "ACK";
+    line += " with number "+std::to_string(ackNum)+" , loss ";
+    if(loss)
+        line += "Yes\n";
+    else
+        line += "No\n";
+    filestream.open(filename, std::ios_base::app);
+    if(!filestream) {
+        throw cRuntimeError("Error opening file '%s'?", filename);
+    } else {
+        if(write)
+            filestream.write(line.c_str(), line.size());
+    }
+    filestream.close();
+    return line;
 }

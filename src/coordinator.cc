@@ -46,7 +46,12 @@ void Coordinator::initialize()
         send(senderMsg, string2.c_str());
         send(receiverMsg, string1.c_str());
     }
-
+    std::ofstream filestream;
+    filestream.open("output.txt", std::ofstream::out);
+    if(!filestream)
+        throw cRuntimeError("Error opening file '%s'?", "output.txt");
+    else
+        filestream.close();
 }
 
 char Coordinator::readInputFile(const char *filename)
