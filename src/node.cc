@@ -125,18 +125,16 @@ void Node::handleMessage(cMessage *msg)
             }
             if(seqNum<messages.size()){
                 double newDelay = 0;
-                if (lastTime - simTime().dbl() > simTime().dbl())
+                if (lastTime > simTime().dbl())
                     newDelay = lastTime - simTime().dbl();
-                else
-                    newDelay = 0;
-                double newTime = simTime().dbl();;
+                double newTime = simTime().dbl();
                 if(timeOut){
                     newDelay = 0;
                     newTime = simTime().dbl();
                     timeOut = false;
                 }
                 if(receivedAck){
-                    newDelay = lastTime - simTime().dbl();
+//                    newDelay = lastTime - simTime().dbl();
                     newTime = simTime().dbl();
                     receivedAck = false;
                 }
@@ -208,6 +206,7 @@ void Node::handleMessage(cMessage *msg)
                     timerMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
                     scheduleAt(newTime + double(getParentModule()->par("TO")), timerMsg);
                     sentFlag.push(true);
+                    newDelay -= double(getParentModule()->par("TD"));
                 }
                 lastTime = newDelay + simTime().dbl();
             }
