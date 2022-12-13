@@ -13,7 +13,9 @@
 using namespace omnetpp;
 
 /**
- *
+ * Derive the Coordinator class from cSimpleModule. The Coordinator mainly reads the coordinator.txt to start the network.
+ * It reads the starting node and the starting time. It sends a message to the starting node with the starting time given in the message.
+ * It sends a message "No" to the other node to let it know that it's a receiver.
  */
 class Coordinator : public cSimpleModule
 {

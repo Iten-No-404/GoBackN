@@ -18,34 +18,42 @@ typedef std::bitset<8> bits;
 using namespace omnetpp;
 
 /**
- * Derive the Node class from cSimpleModule. This is the class where a message is sent as a reply to each
- * message received from the hub.
+ * Derive the Node class from cSimpleModule. This is the class where a node can be a sender or a receiver.
+ * If it's a sender then it processes the messages in the window it needs to send, sends them and awaits a corresponding ACK for each.
+ * It also sets a timer (by self-messaging) to re-send the whole window again in case of the absence of awaited ACKs and times out.
+ * The receiver however can only receive the message it's waiting for (identifies this by the sequence number) and send an ACK in case of
+ * a message with correct parity or a NACK in case of incorrect parity.
  */
 class Node : public cSimpleModule
 {
   protected:
-    // data members
-    bool sender = false;
-    bool initial = true;
-    int index = 0;
-    int seqNum = 0;
-    int seqBeg = 0;
-    int seqEnd = 0;
-    int stoppedTimeoutCount = 0;
-    double lastTime = 0.0;
-    std::queue<bool> sentFlag;
-    std::vector<std::string> errors,messages;
+    /// Data members
+    bool sender = false; // Used to indicate if a node is a sender or a receiver of the Go Back N algorithm.
+    bool initial = true; // Used to receive the first initialization message of the coordinator.
+    int index = 0;  // Used to store the index of the node itself. (in our case 0 or 1).
+    int seqNum = 0; // Used to keep track of which messages were sent & acknowledged.
+    int seqBeg = 0; // Used to indicate the sequence number of the beginning of the window.
+    int stoppedTimeoutCount = 0; /* Used to keep count of the acknowledgments received from the receiver and its timer hasn't timed out yet.
+    Used to avoid timing out on messages of which the sender already received an a acknowledgment.*/
+    double lastTime = 0.0; // Used in scheduling the next message to send.
     int logSeqNum = -1; // Used to help in printing the log of reading the line.
-    // The following redefined virtual function holds the algorithm.
+    std::queue<bool> sentFlag; //Used to indicate the amount of the messages in the window that have been sent.
+    std::vector<std::string> errors,messages; /* Used to store all the messages and their channel errors from the input file instead of reading the file multiple times.
+    The following redefined virtual function holds the algorithm.*/
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
-    void readInputFile(const char *filename);
-    void writeOutputFile(const char *filename, std::string logMessage);
-    std::string writeOutputFileBP(const char *filename, double startingPT, int j, bool write=true);
-    std::string writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool lost, int duplicate, double delay, bool write=true);
-    std::string writeOutputFileTO(const char *filename, double timeoutTime, int seqNumber, bool write=true);
-    std::string writeOutputFileCF(const char *filename, double startingTR, bool nack, int ackNum, bool loss, bool write=true);
+    // Byte Stuffing algorithm. It takes the index of the message to perform the byte stuffing on.
     std::string byteStuffing(int seqNumber);
+    /// File Helper Functions
+    void readInputFile(const char *filename); // Used to read the input file at the sender.
+    void writeOutputFile(const char *filename, std::string logMessage); // Used to write a line directly to the output file.
+    std::string writeOutputFileBP(const char *filename, double startingPT, int j, bool write=true); // Used to write the output line of reading input line before processing.
+    // Used to write the output line after processing the message and on sending it through the channel.
+    std::string writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool mod, bool lost, int duplicate, double delay, bool write=true);
+    // Used to write the output line on timeout event.
+    std::string writeOutputFileTO(const char *filename, double timeoutTime, int seqNumber, bool write=true);
+    // Used to write the output line after processing and on sending the control frame through the channel.
+    std::string writeOutputFileCF(const char *filename, double startingTR, bool nack, int ackNum, bool loss, bool write=true);
 };
 
 // The module class needs to be registered with OMNeT++
@@ -57,11 +65,11 @@ void Node::initialize()
 
 void Node::handleMessage(cMessage *msg)
 {
-    MessageFrame_Base *mmsg = check_and_cast<MessageFrame_Base *> (msg);
+    MessageFrame_Base *mmsg = check_and_cast<MessageFrame_Base *> (msg); // Casting from the general message class to the custom made one.
     double delays =  double(getParentModule()->par("PT"))+double(getParentModule()->par("TD"));
-    bool timeOut = false;
-    bool receivedAck = false;
-    bool noErrors = false;
+    bool timeOut = false; // Used to indicate whether a timeout event occurs.
+    bool receivedAck = false; // Used to indicate whether the correct ACK was received.
+    bool noErrors = false; // Used to be able to send the first frame after a timeout error free.
     // For logging purposes.
     std::string log;
     if(mmsg->isSelfMessage() && mmsg->getFrameType() == -1){
@@ -71,13 +79,10 @@ void Node::handleMessage(cMessage *msg)
         return;
     // Check for timeouts in sender.
     } else if(mmsg->isSelfMessage() && seqNum<messages.size()){
-        // Check if the timer was already stopped.
-//        EV<<"stoppedTimeoutCount: ";
-//        EV<<stoppedTimeoutCount;
+        // Check if the timer was already stopped either by receiving an ACK or by another timeout being triggered.
         if(stoppedTimeoutCount>0)
             stoppedTimeoutCount--;
         else {
-//            EV<<"Timeout!!!";
             timeOut = true;
             noErrors = true;
             log = writeOutputFileTO("output.txt", simTime().dbl(), seqNum%int(getParentModule()->par("WS")));
@@ -85,61 +90,49 @@ void Node::handleMessage(cMessage *msg)
             while(!sentFlag.empty())
             {
                 sentFlag.pop();
-                stoppedTimeoutCount++;
+                stoppedTimeoutCount++; // Avoid the timeouts of the rest of the window.
             }
             stoppedTimeoutCount--;
         }
     }
-//    EV<<mmsg->getFrameType();
-//    if(!sender){
-//        EV<<"\nSeqNo: ";
-//        EV<<mmsg->getSeqNum();
-//        EV<<"\nPayload: ";
-//        EV<<mmsg->getPayload();
-//        EV<<"\nParity: ";
-//        EV<<bits(mmsg->getParity()).to_string();
-//    }
-//    else {
-//        EV<<"\nAckNo: ";
-//        EV<<mmsg->getAckNum();
-//    }
     // Initialize sender and receiver settings.
     std::string receiving ="No";
-    if(initial && mmsg->getPayload() == receiving){
+    if(initial && mmsg->getPayload() == receiving){// Initialize receiver
         initial = false;
-        cancelAndDelete(msg);
+        cancelAndDelete(msg); // Release resources.
         if(isName("node0"))
             index = 0;
         else
             index = 1;
         return;
-    } else if(initial) {
+    } else if(initial) {// Initialize sender
         sender = true;
         if(isName("node0"))
             index = 0;
         else
             index = 1;
         seqBeg = 0;
-        seqEnd = int(getParentModule()->par("WS"))-1;
         std::string fileName = "input"+std::to_string(index)+".txt";
+        // Reading all the messages at one and storing them in a vector with their errors.
+        // Just to avoid reading the file multiple times.
         readInputFile(fileName.c_str());
     }
     // Sender handler.
     if(sender){
-        // Send messages in 3 cases: Initial state, Timeout State & Receiving the correct ACK(since we move the window).
+        // Send messages in 3 cases: Initial state, Timeout State & Receiving the correct ACK (since we move the window).
         if(mmsg->getFrameType() == 1 || initial || timeOut){
             // Check if the received ACK is the one the sender is waiting for.
             if(!timeOut && mmsg->getAckNum() == (seqBeg+1)%int(getParentModule()->par("WS")))
             {
+                // Move the window.
                 seqBeg++;
                 seqBeg %= (int(getParentModule()->par("WS")));
-                seqEnd++;
-                seqEnd %= (int(getParentModule()->par("WS")));
                 seqNum++;
-                stoppedTimeoutCount++;
+                stoppedTimeoutCount++; // Avoid its timeout/stop its timer.
                 sentFlag.pop();
                 receivedAck = true;
             }
+            // If there are still messages the sender wants to send.
             if(seqNum<messages.size()){
                 double newDelay = 0;
                 if (lastTime > simTime().dbl())
@@ -151,19 +144,20 @@ void Node::handleMessage(cMessage *msg)
                     timeOut = false;
                 }
                 if(receivedAck){
-//                    newDelay = lastTime - simTime().dbl();
                     newTime = simTime().dbl();
                     receivedAck = false;
                 }
+                // Start from the correct position in the window.
                 for(int i=sentFlag.size(); i<int(getParentModule()->par("WS")); i++){
-                    if(initial){
+                    if(initial){// Add the starting time for the initial send.
                         newDelay += std::stod(mmsg->getPayload());
                         newTime += std::stod(mmsg->getPayload());
                         initial = false;
                     }
                     int j = seqNum + i;
-                    if(j >= messages.size())
+                    if(j >= messages.size()) // If there are no more messages to send, exit.
                         break;
+                    // Perform byte stuffing on message.
                     std::string value = byteStuffing(j);
                     bool modificationE = false;
                     bool lossE = false;
@@ -183,9 +177,11 @@ void Node::handleMessage(cMessage *msg)
                     else
                         errors[j] = "0000";
                     noErrors = false;
+                    // Create a new message to send.
                     MessageFrame_Base *newMsg = new MessageFrame_Base(value.c_str());
                     newMsg->setPayload(value);
                     newMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
+                    // Add Parity/Trailer.
                     bits parity(std::string("00000000"));
                     for(int i=0; i<value.size(); i++)
                     {
@@ -193,14 +189,10 @@ void Node::handleMessage(cMessage *msg)
                         parity = parity ^ temp;
                     }
                     newMsg->setParity(static_cast<char>( parity.to_ulong() ));
-                    newMsg->setFrameType(0);
+                    newMsg->setFrameType(0); // i.e. data frame.
                     newDelay += delays;
                     newTime += double(getParentModule()->par("PT"));
-//                    EV<<"\nDelay: ";
-//                    EV<<newDelay;
-//                    EV<<"\nSchedule At: ";
                     double temp = (newTime + double(getParentModule()->par("TO")));
-//                    EV<<temp;
                     // Variable to ease printing logs
                     int duplicate = 0;
                     if(duplicationE)
@@ -210,6 +202,7 @@ void Node::handleMessage(cMessage *msg)
                     std::string payload = newMsg->getPayload();
                     std::string trailer = bits(newMsg->getParity()).to_string();
                     int modifiedBitNumber = 0;
+                    // Handle loss, delay, modification and duplication channel errors.
                     if(!lossE){
                         if(modificationE){
                             std::string modifiedMsg = newMsg->getPayload();
@@ -234,13 +227,16 @@ void Node::handleMessage(cMessage *msg)
                     }
                     else
                         cancelAndDelete(newMsg); // If the message was lost, clear its resources.
+                    // Just some logging to the output file.
                     if(simTime().dbl() + newDelay - delays != simTime().dbl()){
                         if(j > logSeqNum){
+                            // Send a self message to write the output at its correct time.
                             std::string m;
                             m = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j, false);
                             MessageFrame_Base *logMsg = new MessageFrame_Base("");
                             logMsg->setPayload(m);
                             logMsg->setFrameType(-1);
+                            scheduleAt(simTime().dbl() + newDelay - delays, logMsg);
                             logSeqNum++;
                         }
                     }
@@ -281,10 +277,10 @@ void Node::handleMessage(cMessage *msg)
                         if(delayE && duplicationE)
                             log = writeOutputFileBT("output.txt", newTime+double(getParentModule()->par("DD")), "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate+1, errorDelay);
                         else if(duplicationE)
-                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, 0.0);
+                            log = writeOutputFileBT("output.txt", newTime+double(getParentModule()->par("DD")), "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate+1, 0.0);
                         EV<<log;
                     }
-                    // Start Timer
+                    // Start Timer by self messaging.
                     MessageFrame_Base *timerMsg = new MessageFrame_Base("Timeout");
                     timerMsg->setSeqNum((seqBeg+i)%int(getParentModule()->par("WS")));
                     scheduleAt(newTime + double(getParentModule()->par("TO")), timerMsg);
@@ -296,14 +292,12 @@ void Node::handleMessage(cMessage *msg)
         }
     // Receiver Handler
     } else {
+        // Check if the received message is the awaited one.
         if(mmsg->getSeqNum() == seqNum){
                 bool ackLost = false;
                 int randomOccurance = int(uniform(0,100));
-                // Uncomment after finishing.
                 if((randomOccurance+1)/100.0 <= double(getParentModule()->par("LP")))
                     ackLost = true;
-//                EV<<"\nackLost: ";
-//                EV<<ackLost;
                 seqNum++;
                 seqNum %= int(getParentModule()->par("WS"));
                 std::string name = "";
@@ -316,6 +310,7 @@ void Node::handleMessage(cMessage *msg)
                     bits temp(payload[i]);
                     parity = parity ^ temp;
                 }
+                // Check if the received message has a correct parity.
                 bool sendack = static_cast<char>( parity.to_ulong() ) == mmsg->getParity();
                 if(sendack)
                 {
@@ -334,8 +329,7 @@ void Node::handleMessage(cMessage *msg)
                 ackMsg->setAckNum((mmsg->getSeqNum()+1)%int(getParentModule()->par("WS")));
                 ackMsg->setFrameType(frameType);
                 double newDelay = delays;
-//                EV<<"NewDelay: ";
-//                EV<<newDelay;
+                // Check if the ACK/NACK was lost and log it accordingly in the output file.
                 if(!ackLost){
                     sendDelayed(ackMsg, newDelay,"nodeGate$o"); // send out the message
                     std::string m;
@@ -361,7 +355,7 @@ void Node::handleMessage(cMessage *msg)
                 }
         }
     }
-    cancelAndDelete(msg);
+    cancelAndDelete(msg); // Release the resources of the message received.
 }
 
 void Node::readInputFile(const char *filename)
@@ -416,7 +410,7 @@ void Node::writeOutputFile(const char *filename, std::string logMessage){
     return;
 }
 
-// At time [.. starting processing timeï¿½.. ], Node[id] , Introducing channel error with code=[ ï¿½code in 4 bitsï¿½ ] .
+// At time [.. starting processing time….. ], Node[id] , Introducing channel error with code=[ …code in 4 bits… ] .
 std::string Node::writeOutputFileBP(const char *filename, double startingPT, int j, bool write)
 {
     std::ofstream filestream;
@@ -435,7 +429,7 @@ std::string Node::writeOutputFileBP(const char *filename, double startingPT, int
     return line;
 }
 
-//At time [.. starting sending time after processingï¿½.. ], Node[id] [sent/received] frame with seq_num=[..] and payload=[ ï¿½.. in characters after modificationï¿½.. ] and trailer=[ï¿½ï¿½.in bitsï¿½.. ] ,
+//At time [.. starting sending time after processing….. ], Node[id] [sent/received] frame with seq_num=[..] and payload=[ ….. in characters after modification….. ] and trailer=[…….in bits….. ] ,
 //Modified [-1 for no modification, otherwise the modified bit number] ,Lost [Yes/No], Duplicate [0 for none, 1 for the first version, 2 for the second version], Delay [0 for no delay , otherwise the error delay interval].
 std::string Node::writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool mod, bool lost, int duplicate, double delay, bool write){
     std::ofstream filestream;
@@ -472,7 +466,7 @@ std::string Node::writeOutputFileBT(const char *filename, double startingTR, std
     return line;
 }
 
-//Time out event at time [.. timer off-timeï¿½.. ], at Node[id] for frame with seq_num=[..]
+//Time out event at time [.. timer off-time….. ], at Node[id] for frame with seq_num=[..]
 std::string Node::writeOutputFileTO(const char *filename, double timeoutTime, int seqNumber, bool write){
     std::ofstream filestream;
     std::string line = "Time out event at time ["+std::to_string(int(timeoutTime));
@@ -490,7 +484,7 @@ std::string Node::writeOutputFileTO(const char *filename, double timeoutTime, in
     return line;
 }
 
-//At time[.. starting sending time after processingï¿½.. ], Node[id] Sending [ACK/NACK] with number [ï¿½] , loss [Yes/No ]
+//At time[.. starting sending time after processing….. ], Node[id] Sending [ACK/NACK] with number […] , loss [Yes/No ]
 std::string Node::writeOutputFileCF(const char *filename, double startingTR, bool nack, int ackNum, bool loss, bool write){
     std::ofstream filestream;
     std::string line = "At time ["+std::to_string(int(startingTR));
