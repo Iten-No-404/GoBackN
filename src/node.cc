@@ -35,6 +35,7 @@ class Node : public cSimpleModule
     double lastTime = 0.0;
     std::queue<bool> sentFlag;
     std::vector<std::string> errors,messages;
+    int logSeqNum = -1; // Used to help in printing the log of reading the line.
     // The following redefined virtual function holds the algorithm.
     virtual void initialize() override;
     virtual void handleMessage(cMessage *msg) override;
@@ -234,46 +235,51 @@ void Node::handleMessage(cMessage *msg)
                     else
                         cancelAndDelete(newMsg); // If the message was lost, clear its resources.
                     if(simTime().dbl() + newDelay - delays != simTime().dbl()){
-                        std::string m;
-                        m = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j, false);
-                        MessageFrame_Base *logMsg = new MessageFrame_Base("");
-                        logMsg->setPayload(m);
-                        logMsg->setFrameType(-1);
-                        scheduleAt(simTime().dbl() + newDelay - delays, logMsg);
+                        if(j > logSeqNum){
+                            std::string m;
+                            m = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j, false);
+                            MessageFrame_Base *logMsg = new MessageFrame_Base("");
+                            logMsg->setPayload(m);
+                            logMsg->setFrameType(-1);
+                            logSeqNum++;
+                        }
                     }
                     else
                     {
-                        log = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j);
-                        EV<<log;
+                        if(j > logSeqNum){
+                            log = writeOutputFileBP("output.txt", simTime().dbl() + newDelay - delays, j);
+                            EV<<log;
+                            logSeqNum++;
+                        }
                     }
                     if(simTime().dbl() != newTime){
                         std::string m1, m2;
                         if(delayE)
-                            m1 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, errorDelay, false);
+                            m1 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate, errorDelay, false);
                         else
-                            m1 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, 0.0, false);
+                            m1 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate, 0.0, false);
                         MessageFrame_Base *logMsg1 = new MessageFrame_Base("");
                         logMsg1->setPayload(m1);
                         logMsg1->setFrameType(-1);
                         scheduleAt(newTime, logMsg1);
                         if(delayE && duplicationE)
-                            m2 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, errorDelay, false);
+                            m2 = writeOutputFileBT("output.txt", newTime+double(getParentModule()->par("DD")), "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate+1, errorDelay, false);
                         else if(duplicationE)
-                            m2 = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, 0.0, false);
+                            m2 = writeOutputFileBT("output.txt", newTime+double(getParentModule()->par("DD")), "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate+1, 0.0, false);
                         if(duplicationE){
                             MessageFrame_Base *logMsg2 = new MessageFrame_Base("");
                             logMsg2->setPayload(m2);
                             logMsg2->setFrameType(-1);
-                            scheduleAt(newTime, logMsg2);
+                            scheduleAt(newTime+double(getParentModule()->par("DD")), logMsg2);
                         }
                     } else {
                         if(delayE)
-                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, errorDelay);
+                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate, errorDelay);
                         else
-                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate, 0.0);
+                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate, 0.0);
                         EV<<log;
                         if(delayE && duplicationE)
-                            log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, errorDelay);
+                            log = writeOutputFileBT("output.txt", newTime+double(getParentModule()->par("DD")), "sent", seqNumber, payload, trailer, modifiedBitNumber, modificationE, lossE, duplicate+1, errorDelay);
                         else if(duplicationE)
                             log = writeOutputFileBT("output.txt", newTime, "sent", seqNumber, payload, trailer, modifiedBitNumber, lossE, duplicate+1, 0.0);
                         EV<<log;
@@ -290,13 +296,6 @@ void Node::handleMessage(cMessage *msg)
         }
     // Receiver Handler
     } else {
-        // Variable to ease printing logs
-        int duplicate = 0;
-        int errorDelay = 0;// double(getParentModule()->par("ED"));
-        int modifiedBitNumber = 0;
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////modifiedBitNumber/////////duplicateNum///
-        log = writeOutputFileBT("output.txt", simTime().dbl(), "received", mmsg->getSeqNum(), mmsg->getPayload(), bits(mmsg->getParity()).to_string(), modifiedBitNumber, false, duplicate, errorDelay);
-        EV<<log;
         if(mmsg->getSeqNum() == seqNum){
                 bool ackLost = false;
                 int randomOccurance = int(uniform(0,100));
@@ -417,10 +416,14 @@ void Node::writeOutputFile(const char *filename, std::string logMessage){
     return;
 }
 
+// At time [.. starting processing time�.. ], Node[id] , Introducing channel error with code=[ �code in 4 bits� ] .
 std::string Node::writeOutputFileBP(const char *filename, double startingPT, int j, bool write)
 {
     std::ofstream filestream;
-    std::string line = "At time "+std::to_string(int(startingPT))+"."+std::to_string(int((startingPT-int(startingPT))*10))+", Node"+std::to_string(index)+" , Introducing channel error with code="+errors[j]+" .\n";
+    std::string line = "At time ["+std::to_string(int(startingPT));
+    if(int((startingPT-int(startingPT))*10) != 0)
+        line += "."+std::to_string(int((startingPT-int(startingPT))*10));
+    line += "], Node["+std::to_string(index)+"] , Introducing channel error with code =["+errors[j]+"]\n";
     filestream.open(filename, std::ios_base::app);
     if(!filestream) {
         throw cRuntimeError("Error opening file '%s'?", filename);
@@ -432,18 +435,32 @@ std::string Node::writeOutputFileBP(const char *filename, double startingPT, int
     return line;
 }
 
-std::string Node::writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool lost, int duplicate, double delay, bool write){
+//At time [.. starting sending time after processing�.. ], Node[id] [sent/received] frame with seq_num=[..] and payload=[ �.. in characters after modification�.. ] and trailer=[��.in bits�.. ] ,
+//Modified [-1 for no modification, otherwise the modified bit number] ,Lost [Yes/No], Duplicate [0 for none, 1 for the first version, 2 for the second version], Delay [0 for no delay , otherwise the error delay interval].
+std::string Node::writeOutputFileBT(const char *filename, double startingTR, std::string verb, int seqNumber, std::string payload, std::string trailer, int modified, bool mod, bool lost, int duplicate, double delay, bool write){
     std::ofstream filestream;
-    std::string line = "At time "+std::to_string(int(startingTR))+"."+std::to_string(int((startingTR-int(startingTR))*10))+", Node"+std::to_string(index)+" "+verb+" frame with ";
-    line += "seq_num="+std::to_string(seqNumber)+" and payload="+payload+" and trailer="+trailer+" , Modified "+std::to_string(modified)+" ,Lost ";
+    std::string line = "At time ["+std::to_string(int(startingTR));
+    if(int((startingTR-int(startingTR))*10) != 0)
+        line += "."+std::to_string(int((startingTR-int(startingTR))*10));
+    line += "], Node["+std::to_string(index)+"] ["+verb+"] frame with ";
+    line += "seq_num=["+std::to_string(seqNumber)+"] and payload=["+payload+"] and trailer=["+trailer+"] , Modified [";
+    if(!mod)
+        line +="-1";
+    else
+        line += std::to_string(modified);
+    line +="] ,Lost [";
     if(lost)
         line+= "Yes";
     else
         line+= "No";
-    if(sender)
-        line += ", Duplicate "+std::to_string(duplicate)+", Delay "+std::to_string(int(delay))+"."+std::to_string(int((delay-int(delay))*10))+".\n";
+    if(sender){
+        line += "], Duplicate ["+std::to_string(duplicate)+"], Delay ["+std::to_string(int(delay));
+        if(int((delay-int(delay))*10) != 0)
+            line += "."+std::to_string(int((delay-int(delay))*10));
+        line += "]\n";
+    }
     else
-        line += ".\n";
+        line += "]\n";
     filestream.open(filename, std::ios_base::app);
     if(!filestream) {
         throw cRuntimeError("Error opening file '%s'?", filename);
@@ -454,9 +471,14 @@ std::string Node::writeOutputFileBT(const char *filename, double startingTR, std
     filestream.close();
     return line;
 }
+
+//Time out event at time [.. timer off-time�.. ], at Node[id] for frame with seq_num=[..]
 std::string Node::writeOutputFileTO(const char *filename, double timeoutTime, int seqNumber, bool write){
     std::ofstream filestream;
-    std::string line = "Time out event at time "+std::to_string(int(timeoutTime))+"."+std::to_string(int((timeoutTime-int(timeoutTime))*10))+", at Node"+std::to_string(index)+" for frame with seq_num="+std::to_string(seqNumber)+"\n";
+    std::string line = "Time out event at time ["+std::to_string(int(timeoutTime));
+    if(int((timeoutTime-int(timeoutTime))*10) != 0)
+        line += "."+std::to_string(int((timeoutTime-int(timeoutTime))*10));
+    line += "], at Node["+std::to_string(index)+"] for frame with seq_num=["+std::to_string(seqNumber)+"]\n";
     filestream.open(filename, std::ios_base::app);
     if(!filestream) {
         throw cRuntimeError("Error opening file '%s'?", filename);
@@ -467,18 +489,23 @@ std::string Node::writeOutputFileTO(const char *filename, double timeoutTime, in
     filestream.close();
     return line;
 }
+
+//At time[.. starting sending time after processing�.. ], Node[id] Sending [ACK/NACK] with number [�] , loss [Yes/No ]
 std::string Node::writeOutputFileCF(const char *filename, double startingTR, bool nack, int ackNum, bool loss, bool write){
     std::ofstream filestream;
-    std::string line = "At time "+std::to_string(int(startingTR))+"."+std::to_string(int((startingTR-int(startingTR))*10))+", Node"+std::to_string(index)+" Sending ";
+    std::string line = "At time ["+std::to_string(int(startingTR));
+    if(int((startingTR-int(startingTR))*10) != 0)
+        line += "."+std::to_string(int((startingTR-int(startingTR))*10));
+    line += "], Node["+std::to_string(index)+"] Sending [";
     if(nack)
         line += "NACK";
     else
         line += "ACK";
-    line += " with number "+std::to_string(ackNum)+" , loss ";
+    line += "] with number ["+std::to_string(ackNum)+"] , loss [";
     if(loss)
-        line += "Yes\n";
+        line += "Yes]\n";
     else
-        line += "No\n";
+        line += "No]\n";
     filestream.open(filename, std::ios_base::app);
     if(!filestream) {
         throw cRuntimeError("Error opening file '%s'?", filename);
