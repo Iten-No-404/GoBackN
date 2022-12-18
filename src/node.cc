@@ -326,7 +326,10 @@ void Node::handleMessage(cMessage *msg)
                     seqNum %= int(getParentModule()->par("WS"));
                 }
                 MessageFrame_Base *ackMsg = new MessageFrame_Base(name.c_str());
-                ackMsg->setAckNum((mmsg->getSeqNum()+1)%int(getParentModule()->par("WS")));
+                if(sendack)
+                    ackMsg->setAckNum((mmsg->getSeqNum()+1)%int(getParentModule()->par("WS")));
+                else
+                    ackMsg->setAckNum((mmsg->getSeqNum())%int(getParentModule()->par("WS")));
                 ackMsg->setFrameType(frameType);
                 double newDelay = delays;
                 // Check if the ACK/NACK was lost and log it accordingly in the output file.
